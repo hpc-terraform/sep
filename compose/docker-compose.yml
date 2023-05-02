@@ -1,0 +1,60 @@
+version: '3'
+
+services:
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /web/build/nginx/conf.d:/etc/nginx/conf.d
+      - /web/nginx/ssl:/etc/nginx/ssl
+      - /web/logs:/var/log/nginx
+      - /web/content:/var/www
+
+  php-fpm:
+    image: php:fpm
+    container_name: php-fpm
+    restart: always
+    volumes:
+      - /web/content:/var/www
+
+  gitlab:
+    image: 'gitlab/gitlab-ce:15.10.3-ce.0'
+    hostname: "${HOSTNAME_GITLAB}"
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://${HOSTNAME_GIT}'
+        nginx['enable'] = false
+        gitlab_workhorse['listen_network'] = "tcp"
+        gitlab_workhorse['listen_addr'] = "0.0.0.0:8181"
+        letsencrypt['enable'] = false
+        gitlab_rails['gitlab_email_enabled'] = true
+        gitlab_rails['gitlab_email_from'] = 'noreply@${HOSTNAME_GIT}'
+        gitlab_rails['gitlab_email_display_name'] = 'gitLab'
+        gitlab_rails['gitlab_email_reply_to'] = 'noreply@${HOSTNAME_GIT}'
+        gitlab_rails['smtp_enable'] = true
+        gitlab_rails['smtp_address'] = "mailserver"
+        gitlab_rails['smtp_port'] = 587
+        gitlab_rails['smtp_domain'] = '${HOSTNAME_WEB}'
+
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - /web/gitlab/etc:/etc/gitlab
+      - /web/gitlab/var:/var/log/gitlab
+      - /web/gitlab/data:/var/opt/gitlab
+
+  mailserver:
+      image: boky/postfix
+      container_name: mailserver
+      container_name: postfix
+      environment:
+        - maildomain=${HOSTNAME_WEB}
+        - smtp_user=admin@e${HOSTNAME_WEB}:${PASSWORD}
+      ports:
+        - "587:587"
