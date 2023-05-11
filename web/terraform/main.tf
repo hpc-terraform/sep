@@ -6,26 +6,54 @@ terraform {
     }
   }
 }
+data "google_compute_subnetwork" "existing_subnetwork" {
+  name   = var.subnetwork
+  region = "us-central1"
+}
 
 provider "google" {
-  project     = var.project_id
-  region      = var.region
-  zone        = var.zone
+  project = var.project_id
+  region  = var.region
+  zone    = var.zone
 }
 
 resource "google_compute_disk" "web_disk" {
-  name = "web-disk"
-  size = 1200
+  name = "webserver-t-disk"
+  size = 200
 }
 
 resource "google_compute_address" "static_ip" {
-  name = "webserver-static-ip"
+  name = var.static_ip
+}
+resource "google_compute_firewall" "http" {
+  name    = "sep-allow-http"
+  network = "sep-cluster-net"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["80"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["http-server-sep"]
 }
 
+resource "google_compute_firewall" "https" {
+  name    = "sep-allow-https"
+  network = "sep-cluster-net"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["443"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["https-server-sep"]
+}
 
 resource "google_compute_instance" "webserver" {
   name         = var.webname
-  machine_type = "n1-standard-2"
+  machine_type = "n2-standard-4"
   zone         = var.zone
 
   boot_disk {
@@ -40,7 +68,8 @@ resource "google_compute_instance" "webserver" {
   }
 
   network_interface {
-    network = "default"
+    network    = data.google_compute_subnetwork.existing_subnetwork.network
+    subnetwork = data.google_compute_subnetwork.existing_subnetwork.self_link
 
     access_config {
       nat_ip = google_compute_address.static_ip.address
@@ -71,15 +100,15 @@ resource "google_compute_instance" "webserver" {
     sudo mkdir /web
     echo UUID=$(sudo blkid -s UUID -o value /dev/sdb) /web ext4 defaults 0 0 | sudo tee -a /etc/fstab
     sudo mount /web
-    mkdir -p /web/gitlab/etc /web/build
+    mkdir -p /web/gitlab/etc /web/build /mnt/filestore
+    mount -t nfs  ${var.filestore_ip_address}:/${var.filestore_name} /mnt/filestore
+    ln -s /mnt/filestore/html /web/html
     cd /web &&\
     git clone https://github.com/rgclapp007/terraform-docker-gitlab-web.git build
-    gsutil cp ${var.config_path}/env /web/build/compose/.env
-    gsutil cp -r ${var.config_path}/nginx /web/nginx
+    gsutil cp ${var.config_path}/env /web/build/web/compose/.env
     cd /web/build/compose &&
     docker-compose  up -d
   EOT
 
-  tags = ["http-server","https-server"]
+  tags = ["http-server-sep", "https-server-sep"]
 }
-

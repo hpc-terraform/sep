@@ -1,0 +1,92 @@
+
+blueprint_name: build-disk
+
+vars:
+  project_id:  sep-storage ## Set GCP Project ID Here ##
+  deployment_name: sep-build
+  region: us-central1
+  zone: us-central1-c
+  new_image_family: sep-base-image
+  subnetwork_name: sep-cluster-sub
+  enable_reconfigure: true
+
+deployment_groups:
+- group: primary
+  modules:
+
+  - id: network1
+    source: modules/network/pre-existing-vpc
+    settings: 
+      network_name:  sep-cluster-net
+      subnetwork_name:  sep-cluster-sub
+
+  - id: scripts_for_image
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: data
+        source: /home/clapp_stanford_edu/toolkit-sdss/kill_idle.sh
+        destination: /usr/bin/kill_idle.sh
+      - type: shell
+        destination: startup_script
+        content: |
+          #!/bin/sh
+          sudo yum remove docker \
+                  docker-client \
+                  docker-client-latest \
+                  docker-common \
+                  docker-latest \
+                  docker-latest-logrotate \
+                  docker-logrotate \
+                  docker-engine
+          sudo yum install -y yum-utils
+          sudo yum-config-manager \
+            --add-repo \
+            https://download.docker.com/linux/centos/docker-ce.repo
+          sudo yum -y install docker-ce docker-ce-cli containerd.io \
+            docker-compose-plugin
+          sudo systemctl enable docker
+          sudo yum -y update
+          sudo yum -y wget iproute
+          sudo yum -y  install org-x11-server-Xorg xorg-x11-xauth 
+          sudo cat X11Forwarding yes >>/etc/ssh/sshd_config
+          sudo cat X11DisplayOffset 10 >>/etc/ssh/sshd_config
+          sudo cat X11UseLocalhost no >>/etc/ssh/sshd_config
+          cd /tmp &&\
+           sudo wget https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm &&\
+           sudo yum -y localinstall google-chrome-stable_current_x86_64.rpm
+          sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+          sudo echo "[code]">> /etc/yum.repos.d/vscode.repo
+          sudo echo "name=Visual Studio Code">> /etc/yum.repos.d/vscode.repo
+          sudo echo "baseurl=https://packages.microsoft.com/yumrepos/vscode">> /etc/yum.repos.d/vscode.repo
+          sudo echo "enabled=1">> /etc/yum.repos.d/vscode.repo
+          sudo echo "gpgcheck=1">> /etc/yum.repos.d/vscode.repo
+          sudo echo "gpgkey=https://packages.microsoft.com/keys/microsoft.asc">> /etc/yum.repos.d/vscode.repo
+          sudo systemctl enable docker.service
+          sudo systemctl enable containerd.service
+          sudo yum -y install code
+          sudo yum -y install bash-completion bash-completion-extras
+          sudo usermod -aG docker clapp_stanford_edu 
+          sudo usermod -aG docker sfarris_stanford_edu
+          sudo usermod -aG docker arustam_stanford_edu 
+          sudo usermod -aG docker tculliso_stanford_edu
+          sudo usermod -aG docker jdstitt_stanford_edu
+          sudo usermod -aG docker prgiven_stanford_edu
+          ln -s /home/web /web
+          
+
+    outputs: [startup_script]
+
+- group: packer
+  modules:
+  - id: custom-image
+
+    source: modules/packer/custom-image
+    kind: packer
+    settings:
+      disk_size: 40
+      source_image_project_id: [schedmd-slurm-public]
+      source_image_family: schedmd-slurm-21-08-8-hpc-centos-7
+      image_family: $(vars.new_image_family)
+
+

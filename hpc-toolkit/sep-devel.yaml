@@ -1,0 +1,256 @@
+
+blueprint_name: sep-devel
+
+vars:
+  project_id:  sep-storage ## Set GCP Project ID Here ##
+  deployment_name: sep-devel
+  region: us-central1
+  zone: us-central1-c
+  new_image_family: sep-base-image
+  enable_reconfigure: true
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: cluster_network
+    source: modules/network/pre-existing-vpc
+    settings: 
+      network_name:  sep-cluster-net
+      subnetwork_name:  sep-cluster-sub
+
+  - id: homefs
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      server_ip: 10.67.27.10
+      remote_mount: sep_shared_disk
+      fs_type: nfs
+      local_mount: /home
+
+  - id: debug_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 12
+      machine_type: n2-standard-4
+      disk_size_gb: 40
+      can_ip_forward: true
+      service_account:
+          email: name=sep-cluster-access@sep-storage.iam.gserviceaccount.com
+          scopes:
+          - https://www.googleapis.com/auth/devstorage.read_write
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)
+
+  - id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      can_ip_forward: true
+      node_count_dynamic_max: 12
+      service_account:  
+          email: name=sep-cluster-access@sep-storage.iam.gserviceaccount.com
+          scopes:
+          - https://www.googleapis.com/auth/devstorage.read_write
+      machine_type: c2-standard-60
+      disk_size_gb: 100
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)
+
+  - id: spot_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 30
+      can_ip_forward: true
+      service_account:  
+          email: name=sep-cluster-access@sep-storage.iam.gserviceaccount.com
+          scopes:
+          - https://www.googleapis.com/auth/devstorage.read_write
+      enable_spot_vm: true
+      preemptible: true
+      machine_type: c2-standard-60
+      disk_size_gb: 100
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)
+
+  - id: a2_single_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 4
+      can_ip_forward: true
+      machine_type: a2-highgpu-1g
+      service_account:  
+          email: name=sep-cluster-access@sep-storage.iam.gserviceaccount.com
+          scopes:
+          - https://www.googleapis.com/auth/devstorage.read_write
+      disk_size_gb: 100
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)
+      guest_accelerator:
+      - type: nvidia-tesla-a100
+        count: 1
+
+  - id: a2_quad_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      can_ip_forward: true
+      node_count_dynamic_max: 4
+      machine_type: a2-highgpu-4g
+      disk_size_gb: 100
+      service_account:  
+          email: name=sep-cluster-access@sep-storage.iam.gserviceaccount.com
+          scopes:
+          - https://www.googleapis.com/auth/devstorage.read_write
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)
+      guest_accelerator:
+      - type: nvidia-tesla-a100
+        count: 4
+
+  - id: t4_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 4
+      can_ip_forward: true
+      machine_type: n1-standard-32
+      service_account:  
+          email: name=sep-cluster-access@sep-storage.iam.gserviceaccount.com
+          scopes:
+          - https://www.googleapis.com/auth/devstorage.read_write
+      disk_size_gb: 100
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)
+      guest_accelerator:
+      - type: nvidia-tesla-t4
+        count: 1
+
+  - id: bigmem_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      machine_type: m1-ultramem-40
+      node_count_dynamic_max: 2
+      disk_size_gb: 2000
+      can_ip_forward: true
+      service_account:  
+          email: name=sep-cluster-access@sep-storage.iam.gserviceaccount.com
+          scopes:
+          - https://www.googleapis.com/auth/devstorage.read_write
+      instance_image:
+        family: $(vars.new_image_family)
+        project: $(vars.project_id)
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - cluster_network
+    - homefs
+    - debug_node_group
+    settings:
+      enable_placement: false
+      enable_reconfigure: true
+      is_default: true
+      partition_name: debug
+
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - cluster_network
+    - homefs
+    - compute_node_group
+    settings:
+      partition_name: compute
+      enable_reconfigure: true
+
+  - id: spot_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - cluster_network
+    - homefs
+    - spot_node_group
+    settings:
+      partition_name: spot
+      enable_reconfigure: true 
+
+  - id: a100_single_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - cluster_network
+    - homefs
+    - a2_single_group
+    settings:
+      partition_name: a100s
+      enable_reconfigure: true
+
+  - id: a100_quad_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - cluster_network
+    - homefs
+    - a2_quad_group
+    settings:
+      partition_name: a100q
+      enable_reconfigure: true
+
+  - id: t4_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - cluster_network
+    - homefs
+    - t4_group
+    settings:
+      partition_name: t4
+      enable_reconfigure: true
+
+  - id: bigmem_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - cluster_network
+    - homefs
+    - bigmem_group
+    settings:
+      partition_name: bigmem
+      enable_reconfigure: true
+
+ 
+  - id: hpc_dashboard
+    source: modules/monitoring/dashboard
+    outputs: [instructions]
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    use:
+    - cluster_network
+    - homefs
+    - debug_partition  # debug partition will be default as it is listed first
+    - compute_partition
+    - spot_partition
+    - a100_single_partition
+    - a100_quad_partition
+    - t4_partition
+    - bigmem_partition
+    settings:
+      can_ip_forward: true
+      enable_reconfigure: true 
+      compute_startup_script: |
+        #!/bin/sh
+        chmod 755 /usr/bin/kill_idle.sh
+        /usr/bin/kill_idle.sh &
+
+     # controller_startup_script: |
+     #   echo PrologFlags=X11 >> /usr/local/etc/slurm/slurm.conf
+     #   scontrol reconfigure
+    
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    use:
+    - cluster_network
+    - homefs
+    - slurm_controller
+    settings:
+      disk_size_gb: 80
+      machine_type: n2-standard-4
+

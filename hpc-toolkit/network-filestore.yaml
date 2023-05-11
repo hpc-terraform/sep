@@ -1,0 +1,29 @@
+blueprint_name: network-filestore
+
+vars:
+  project_id: sep-storage  ## Set GCP Project ID Here ##
+  deployment_name: network-filestore-dep
+  region: us-central1
+  zone: us-central1-c
+
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      network_name:  sep-cluster-net
+      subnetwork_name:  sep-cluster-sub
+
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      local_mount: /home
+      filestore_share_name: sep_shared_disk
+      size_gb: 2048
