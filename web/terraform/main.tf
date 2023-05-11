@@ -22,7 +22,7 @@ resource "google_compute_disk" "web_disk" {
   size = 200
 }
 
-resource "google_compute_address" "static_ip" {
+data "google_compute_address" "existing_static_ip" {
   name = var.static_ip
 }
 resource "google_compute_firewall" "http" {
@@ -72,7 +72,7 @@ resource "google_compute_instance" "webserver" {
     subnetwork = data.google_compute_subnetwork.existing_subnetwork.self_link
 
     access_config {
-      nat_ip = google_compute_address.static_ip.address
+      nat_ip = data.google_compute_address.existing_static_ip.address
     }
   }
 
@@ -93,7 +93,7 @@ resource "google_compute_instance" "webserver" {
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
     apt-get update
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose
-    apt-get install -y google-cloud-sdk git
+    apt-get install -y google-cloud-sdk git nfs-kernel-server
     systemctl enable docker
     systemctl start docker 
     sudo mkfs.ext4 -m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/sdb
@@ -106,7 +106,7 @@ resource "google_compute_instance" "webserver" {
     cd /web &&\
     git clone https://github.com/rgclapp007/terraform-docker-gitlab-web.git build
     gsutil cp ${var.config_path}/env /web/build/web/compose/.env
-    cd /web/build/compose &&
+    cd /web/build/web/compose &&
     docker-compose  up -d
   EOT
 

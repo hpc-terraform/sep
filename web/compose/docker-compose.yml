@@ -10,7 +10,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - /web/build/nginx/conf.d:/etc/nginx/conf.d
+      - /web/build/web/nginx/conf.d:/etc/nginx/conf.d
       - /web/nginx/ssl:/etc/nginx/ssl
       - /web/logs:/var/log/nginx
       - /web/html:/var/www
