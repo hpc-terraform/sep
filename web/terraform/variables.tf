@@ -43,6 +43,7 @@ variable "filestore_ip_address" {
   description = "IP address of filestore"
   type        = string
 }
+
 variable "static_ip" {
   description = "Static IP for"
   type        = string

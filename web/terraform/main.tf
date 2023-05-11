@@ -62,7 +62,6 @@ resource "google_compute_instance" "webserver" {
       size  = 20
     }
   }
-
   attached_disk {
     source = google_compute_disk.web_disk.id
   }
@@ -101,6 +100,8 @@ resource "google_compute_instance" "webserver" {
     echo UUID=$(sudo blkid -s UUID -o value /dev/sdb) /web ext4 defaults 0 0 | sudo tee -a /etc/fstab
     sudo mount /web
     mkdir -p /web/gitlab/etc /web/build /mnt/filestore
+    apt-get install -y  git nfs-kernel-server
+    echo "before nfs"
     mount -t nfs  ${var.filestore_ip_address}:/${var.filestore_name} /mnt/filestore
     ln -s /mnt/filestore/html /web/html
     cd /web &&\
